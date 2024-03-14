@@ -1,0 +1,825 @@
+Program.Sub.ScreenSU.Start
+
+Gui.SS_Form1..Create
+Gui.SS_Form1..Caption("Import Bysoft Files")
+Gui.SS_Form1..Size(4230,1920)
+Gui.SS_Form1..Position(0,0)
+Gui.SS_Form1..AlwaysOnTop(False)
+Gui.SS_Form1..FontName("Arial")
+Gui.SS_Form1..FontSize(8)
+Gui.SS_Form1..ForeColor(0)
+Gui.SS_Form1..Backcolor(-2147483633)
+Gui.SS_Form1..ControlBox(True)
+Gui.SS_Form1..MaxButton(False)
+Gui.SS_Form1..MinButton(False)
+Gui.SS_Form1..MousePointer(0)
+Gui.SS_Form1..Moveable(True)
+Gui.SS_Form1..Sizeable(False)
+Gui.SS_Form1..ShowInTaskBar(True)
+Gui.SS_Form1..TitleBar(True)
+
+Gui.SS_Form1..Event(unload,SS_Form1_Unload)
+
+Gui.SS_Form1.cmdRun.Create(button)
+Gui.SS_Form1.cmdRun.Caption("Run Now")
+Gui.SS_Form1.cmdRun.Visible(True)
+Gui.SS_Form1.cmdRun.Size(1000,360)
+Gui.SS_Form1.cmdRun.Zorder(0)
+Gui.SS_Form1.cmdRun.Position(1600,100)
+Gui.SS_Form1.cmdRun.Enabled(True)
+Gui.SS_Form1.cmdRun.FontName("Arial")
+Gui.SS_Form1.cmdRun.FontSize(8)
+Gui.SS_Form1.cmdRun.TabStop(True)
+Gui.SS_Form1.cmdRun.TabIndex(1)
+Gui.SS_Form1.cmdRun.Tooltip("")
+Gui.SS_Form1.cmdRun.ControlGroup(0)
+Gui.SS_Form1.cmdRun.DefaultValue("")
+
+Gui.SS_Form1.cmdRun.Event(click,cmdRun_Click)
+
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Variable.UDT.LM.Define("Job",String)
+Variable.UDT.LM.Define("Suffix",String)
+Variable.UDT.LM.Define("Seq",String)
+Variable.UDT.LM.Define("WC",String)
+Variable.UDT.LM.Define("Pcs",Float)
+Variable.UDT.LM.Define("Hours",Float)
+Variable.UDT.LM.Define("Loaded",String)
+Variable.UDT.LM.Define("Material",String)
+Variable.UDT.LM.Define("Mat_Seq",String)
+Variable.UDT.LM.Define("Mat_Usage",String)
+Variable.uGlobal.uLM.Declare("LM")
+
+Variable.UDT.COPY.Define("Job",String)
+Variable.UDT.COPY.Define("Suffix",String)
+Variable.UDT.COPY.Define("Seq",String)
+Variable.UDT.COPY.Define("WC",String)
+Variable.UDT.COPY.Define("Pcs",Float)
+Variable.UDT.COPY.Define("Hours",Float)
+Variable.UDT.COPY.Define("Loaded",String)
+Variable.UDT.COPY.Define("Material",String)
+Variable.UDT.COPY.Define("Mat_Seq",String)
+Variable.UDT.COPY.Define("Mat_Usage",String)
+Variable.uGlobal.uCOPY.Declare("COPY")
+
+Variable.Global.sendDelete.Declare(Boolean,False)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+
+f.ODBC.Connection!Conx.OpenConnection(v.Ambient.PDSN,v.Ambient.PUser,v.Ambient.PPass)
+gui.SS_Form1..Show
+
+Program.Sub.Main.End
+
+Program.Sub.SS_Form1_Unload.Start
+
+' if deletes were created, close and save the xml
+f.Intrinsic.Control.If(v.Global.sendDelete,=,True)
+	f.Global.XML.DestroyNode("xmlDoc","Orders")
+	f.Global.XML.DestroyNode("xmlDoc","ErpExchange")
+
+	'Save document
+	F.global.xml.saveDocument("xmlDoc",v.Args.WRITEPATH,"ERP-Complete.erpmod")
+	'close document
+	F.global.xml.CloseDocument("xmlDoc")
+f.Intrinsic.Control.EndIf
+
+f.ODBC.Connection!Conx.Close
+f.Intrinsic.Control.End
+
+Program.Sub.SS_Form1_Unload.End
+
+Program.Sub.cmdRun_Click.Start
+
+f.Intrinsic.Debug.EnableLogging
+gui.SS_Form1.cmdRun.Enabled(false)
+
+' find read path
+f.Intrinsic.Control.CallSub(filepath)
+' find file
+f.Intrinsic.Control.CallSub(filelist,"READPATH",v.Args.READPATH,"WRITEPATH",v.Args.WRITEPATH)
+'' read file
+'f.Intrinsic.Control.CallSub(readfile,"ERPFILE",V.Args.ERPFILE)
+'' update material usage
+'f.Intrinsic.Control.CallSub(materialupdate,"READPATH",v.Args.READPATH)
+'' consolidate labor times, for each job-suffix-seq
+'f.Intrinsic.Control.CallSub(consolidatejobinfo)
+'' update labor to wo
+'f.Intrinsic.Control.CallSub(jobop_update,"READPATH",v.Args.READPATH)
+' that's all folks
+f.Intrinsic.Control.CallSub(ss_form1_unload,"WRITEPATH",v.Args.WRITEPATH)
+
+Program.Sub.cmdRun_Click.End
+
+Program.Sub.filePath.Start
+
+v.Local.sFilePath.Declare(String)
+v.Local.sDATFile.Declare(string)
+v.Local.bExists.Declare(Boolean)
+v.Local.sReadPath.Declare(string)
+v.Local.sWritePath.Declare(String)
+v.Local.iFor.Declare(long)
+v.Local.sLine.Declare(String)
+v.Local.sBackup.Declare(String)
+v.Local.sHold.Declare(String)
+
+f.Intrinsic.String.Build("{0}\GSS_BYS.dat",v.Caller.FilesDir,v.Local.sFilePath)
+f.Intrinsic.File.Exists(v.Local.sFilePath,v.Local.bExists)
+f.Intrinsic.Control.If(v.Local.bExists,=,false)
+	f.Intrinsic.UI.Msgbox("File Save Path Not Found.")
+	f.Intrinsic.Control.CallSub(ss_form1_unload)
+f.Intrinsic.Control.Else
+	f.Intrinsic.File.File2String(v.Local.sFilePath,v.Local.sDATFile)
+f.Intrinsic.Control.EndIf
+
+
+f.Intrinsic.String.Split(v.Local.sDATFile,v.Ambient.NewLine,v.Local.sLine)
+f.Intrinsic.Control.For(v.Local.iFor,v.Local.sLine.LBound,v.Local.sLine.UBound,1)
+	f.Intrinsic.String.Split(v.Local.sLine(v.Local.iFor),"::",v.Local.sHold)
+	v.Local.sHold.RedimPreserve(0,1)
+	f.Intrinsic.Control.SelectCase(v.Local.sHold(0))
+	f.Intrinsic.Control.Case("READ")
+		v.Local.sReadPath.Set(v.Local.sHold(1))
+	f.Intrinsic.Control.Case("WRITE")
+		v.Local.sWritePath.Set(v.Local.sHold(1))
+	f.Intrinsic.Control.EndSelect
+f.Intrinsic.Control.Next(v.Local.iFor)
+
+f.Intrinsic.String.Concat(V.Local.sHold(1),"Backup",v.Local.sBackup)
+f.Intrinsic.File.Exists(v.Local.sBackup,v.Local.bExists)
+f.Intrinsic.Control.If(v.Local.bExists,=,false)
+	f.Intrinsic.File.CreateDir(v.Local.sBackup)
+f.Intrinsic.Control.EndIf
+
+f.Intrinsic.Variable.AddRV("READPATH",V.Local.SReadPath)
+f.Intrinsic.Variable.AddRV("WRITEPATH",v.Local.sWritePath)
+Program.Sub.filePath.End
+
+Program.Sub.readFile.Start
+
+
+v.Local.sFileText.Declare(String)
+v.Local.iFor.Declare(string)
+v.Local.sNodeName.Declare(String)
+V.Local.sWO.Declare(String)
+v.Local.fUsage.Declare(Float)
+v.Local.sStartTime.Declare(String)
+v.Local.fLength.Declare(Float)
+v.Local.fWidth.Declare(Float)
+V.Local.sEmployee.Declare(String,"99999")
+v.Local.sRawMaterial.Declare(String)
+v.Local.iSheetCount.Declare(Long)
+v.Local.iRedim.Declare(long,-1)
+v.Local.sValue.Declare(String)
+v.Local.sHold.Declare(String)
+v.Local.sCurrent.Declare(String)
+v.Local.sSel.Declare(String)
+V.Local.fUnitsComplete.Declare(Float)
+V.Local.fHoursActual.Declare(float)
+v.Local.fTotal.Declare(float)
+v.Local.fQIssue.Declare(float)
+v.Local.fTotalSF.Declare(Float)
+
+v.uGlobal.uLM.Redim(0,0)
+
+f.Intrinsic.File.File2String(v.Args.ERPFILE,v.Local.sFileText)
+f.Intrinsic.String.Split(v.Local.sFileText,v.Ambient.NewLine,v.Local.sFileText)
+f.Intrinsic.Control.For(v.Local.iFor,v.Local.sFileText.LBound,v.Local.sFileText.UBound,1)
+
+	f.Intrinsic.String.Split(v.Local.sFileText(v.Local.iFor).Trim,">",v.Local.sNodeName)
+	v.Local.sNodeName.RedimPreserve(0,2)
+	' node name
+	f.Intrinsic.String.StripCharacters(v.Local.sNodeName(0),v.Local.sNodeName(0))
+	' node value
+	f.Intrinsic.String.Split(v.Local.sNodeName(1),"<",v.Local.sValue)
+	v.Local.sValue.RedimPreserve(0,0)
+
+	f.Intrinsic.Control.SelectCase(v.Local.sNodeName(0).UCase)
+		' MATERIAL DATA
+		f.Intrinsic.Control.Case("MATERIAL")
+			v.Local.sCurrent.Set("MATERIAL")
+		' when the node = Sheet, a new sheet is started, clear used variables
+		f.Intrinsic.Control.Case("SHEET")
+			v.Local.sCurrent.Set("SHEET")
+			v.Local.sWO.Set("")
+			v.Local.fUsage.Set(0)
+			v.Local.sStartTime.Set(v.Ambient.Now)
+			v.Local.flength.Set(0)
+			v.Local.fWidth.Set(0)
+'			v.Local.sRawMaterial.Set("")
+			v.Local.iSheetCount.Set(0)
+		f.Intrinsic.Control.Case("STARTTIME")
+			v.Local.sStartTime.Set(v.Local.sValue)
+		f.Intrinsic.Control.Case("LENGTH")
+			v.Local.fLength.Set(v.Local.sValue.Float)
+		f.Intrinsic.Control.Case("WIDTH")
+			v.Local.fWidth.Set(v.Local.sValue.Float)
+		f.Intrinsic.Control.Case("MATERIALNUMBER")
+			f.Intrinsic.Control.If(v.Local.sRawMaterial.Trim,=,"")
+				v.Local.sRawMaterial.Set(v.Local.sValue)
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.Case("SHEETCOUNT")
+			v.Local.iSheetCount.Set(v.Local.sValue.Long)
+
+		' ==== JOB DATA
+		f.Intrinsic.Control.Case("ORDER")
+			f.Intrinsic.Math.Add(v.Local.iRedim,1,v.Local.iRedim)
+			v.uGlobal.uLM.RedimPreserve(0,v.Local.iRedim)
+			v.Local.sCurrent.Set("ORDER")
+		' name could be program name, machine name, material name, wo name, part name.  will keep track of previously read node, to know which.  Only need Order > Name
+		f.Intrinsic.Control.Case("NAME")
+			' wo
+			f.Intrinsic.Control.If(v.Local.sCurrent,=,"ORDER")
+				v.Local.sWO.Set(v.Local.sValue)
+				f.Intrinsic.String.Split(v.Local.sValue,"-",v.Local.sHold)
+				v.Local.sHold.RedimPreserve(0,1)
+				v.uGlobal.uLM(v.Local.iRedim)!Job.Set(v.Local.sHold(0))
+				v.uGlobal.uLM(v.Local.iRedim)!Suffix.Set(v.Local.sHold(1))
+				' set materail values here, also
+				v.uGlobal.uLM(v.Local.iRedim)!Material.Set(v.Local.sRawMaterial)
+				f.Intrinsic.Math.Mult(v.Local.fLength,v.Local.fWidth,v.Local.fTotalSF)
+			f.Intrinsic.Control.ElseIf(v.Local.sCurrent,=,"MATERIAL")
+				v.Local.sRawMaterial.Set(v.Local.sValue)
+			f.Intrinsic.Control.EndIf
+
+		' ==== PARTS DATA
+		f.Intrinsic.Control.Case("PART")
+			v.Local.sCurrent.Set("PART")
+'		f.Intrinsic.Control.Case("RECTANGULARAREA")
+'			f.Intrinsic.Control.If(v.Local.sValue.Float,<>,0)
+'				f.Intrinsic.Math.Add(v.Local.fQIssue,v.Local.sValue.Float,v.Local.fQIssue)
+'				v.uGlobal.uLM(v.Local.iRedim)!Mat_Usage.Set(v.Local.sValue.Float)
+'			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.Case("AREAWITHEFFECTIVEWASTE")
+			v.uGlobal.uLM(v.Local.iRedim)!Mat_Usage.Set(v.Local.sValue.Float)
+		f.Intrinsic.Control.Case("COUNT")
+			v.uGlobal.uLM(v.Local.iRedim)!Pcs.Set(v.Local.sValue.Long)
+			
+		f.Intrinsic.Control.Case("PRODUCTIONTIME")
+			v.uGlobal.uLM(v.Local.iRedim)!Hours.Set(v.Local.sValue)			
+		' could have Info2 on Order and Part, only need the Part value
+		f.Intrinsic.Control.Case("INFO2")
+			f.Intrinsic.Control.If(v.Local.sCurrent,=,"PART")
+				f.Intrinsic.String.Split(v.Local.sValue,"-",v.Local.sHold)
+				v.Local.sHold.RedimPreserve(0,2)
+				v.uGlobal.uLM(v.Local.iRedim)!Mat_Seq.Set(v.Local.sHold(0))
+				v.uGlobal.uLM(v.Local.iRedim)!Seq.Set(v.Local.sHold(1))
+				v.uGlobal.uLM(v.Local.iRedim)!WC.Set(v.Local.sHold(2))
+
+			f.Intrinsic.Control.EndIf
+
+	f.Intrinsic.Control.EndSelect
+
+f.Intrinsic.Control.Next(v.Local.iFor)
+
+
+' flag and delete blank records
+f.Intrinsic.Variable.UDTMultiFlag(v.uGlobal.uLM!Job,"")
+f.Intrinsic.Variable.UDTDeleteFlagged(v.uGlobal.uLM)
+f.Intrinsic.Control.If(v.uGlobal.uLM!Job.UBound,<,0)
+	f.Intrinsic.Control.CallSub(ss_form1_unload)
+f.Intrinsic.Control.EndIf
+
+' all hours and piece counts are tracked on a temp table, and updated at the end of the process
+' don't want too many loops, so figure out issue qty , here also
+f.Intrinsic.Control.For(v.Local.iFor,v.uGlobal.uLM!Job.LBound,v.uGlobal.uLM!Job.UBound,1)
+'	f.Intrinsic.Control.If(v.Local.fTotal,<>,0)
+'		f.Intrinsic.Math.Div(v.uGlobal.uLM(v.Local.iFor)!Mat_Usage,v.Local.fTotal,v.Local.fQIssue)
+'		F.Intrinsic.Math.Mult(V.Local.fQIssue,V.Local.ftotalsf,V.Local.fQIssue)
+'		F.Intrinsic.Math.Div(V.Local.fQIssue,144,V.Local.fQIssue)
+'	f.Intrinsic.Control.EndIf		
+	f.Intrinsic.Control.If(v.uGlobal.uLM(v.Local.iFor)!Mat_Usage,<>,0)
+		f.Intrinsic.Math.Div(v.uGlobal.uLM(v.Local.iFor)!Mat_Usage,144,v.Local.fQIssue)
+		f.Intrinsic.Math.Mult(v.Local.fQIssue,v.uGlobal.uLM(v.Local.iFor)!Pcs,v.Local.fQIssue)
+	f.Intrinsic.Control.EndIf
+	F.Intrinsic.String.Format(V.Local.fQIssue,"0.00",V.Local.fQIssue)
+	F.Intrinsic.Control.If(V.Local.fQIssue,<,0.01)
+		V.Local.fQIssue.Set(0.01)
+	F.Intrinsic.Control.EndIf
+	v.uGlobal.uLM(v.Local.iFor)!Mat_Usage.Set(v.Local.fQIssue)
+
+	F.Intrinsic.String.Build("select * from Job_Header where Job = '{0}' and Suffix = '{1}' ",v.uGlobal.uLM(v.Local.iFor)!Job,v.uGlobal.uLM(v.Local.iFor)!Suffix,V.Local.sSel)
+	F.ODBC.Connection!conx.OpenRecordsetRO("rstSql",V.Local.sSel)
+	F.Intrinsic.Control.if(V.ODBC.conx!rstSql.EOF,=,False)
+		F.Intrinsic.Control.If(V.ODBC.conx!rstSql.FieldVal!Qty_Order,>,10)
+			V.uGlobal.uLM(v.Local.iFor)!Loaded.Set("Y")
+		' if less than 10 pieces write details to tmp table; if Job-Sufix-Seq already exists, add pc and hr values
+		F.Intrinsic.Control.Else
+			F.Intrinsic.String.Build("select * from Temp_Ncell_Load where Job = '{0}' and Suffix = '{1}' and Seq = '{2}' ",v.uGlobal.uLM(v.Local.iFor)!Job,v.uGlobal.uLM(v.Local.iFor)!Suffix,v.uGlobal.uLM(v.Local.iFor)!Seq,V.Local.sSel)
+			F.ODBC.Connection!conx.OpenRecordsetRW("rstJobOps",V.Local.sSel)
+			F.Intrinsic.Control.If(V.ODBC.conx!rstJobOps.EOF,=,True)
+				F.ODBC.conx!rstJobOps.AddNew
+				F.ODBC.conx!rstJobOps.Set!TRMNL(V.Caller.Terminal)
+				F.ODBC.conx!rstJobOps.Set!JOB(v.uGlobal.uLM(v.Local.iFor)!Job)
+				F.ODBC.conx!rstJobOps.Set!SUFFIX(v.uGlobal.uLM(v.Local.iFor)!Suffix)
+				F.ODBC.conx!rstJobOps.Set!SEQ(v.uGlobal.uLM(v.Local.iFor)!Seq)
+				F.ODBC.conx!rstJobOps.Set!QTY(v.uGlobal.uLM(v.Local.iFor)!Pcs)
+				F.ODBC.conx!rstJobOps.Set!Hours_Actual(v.uGlobal.uLM(v.Local.iFor)!Hours)
+			F.Intrinsic.Control.Else
+				F.Intrinsic.Math.Add(V.ODBC.Conx!rstJobOps.FieldVal!QTY,v.uGlobal.uLM(v.Local.iFor)!Pcs,V.Local.fUnitsComplete)
+				F.ODBC.conx!rstJobOps.Set!QTY(V.Local.fUnitsComplete)
+				F.Intrinsic.Math.Add(V.ODBC.conx!rstJobOps.FieldVal!Hours_Actual,v.uGlobal.uLM(v.Local.iFor)!Hours,V.Local.fHoursActual)
+				F.ODBC.conx!rstJobOps.Set!Hours_Actual(V.Local.fHoursActual)
+			F.Intrinsic.Control.EndIf
+			F.ODBC.conx!rstJobOps.Update
+			F.ODBC.conx!rstJobOps.Close
+			V.uGlobal.uLM(v.Local.iFor)!Loaded.Set("")
+		F.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.EndIf
+	F.ODBC.conx!rstSql.Close	
+f.Intrinsic.Control.Next(v.Local.iFor)
+
+
+Program.Sub.readFile.End
+
+Program.Sub.fileList.Start
+
+v.Local.sBckpPath.Declare(string)
+v.Local.bState.Declare(Boolean)
+V.Local.sFileList.Declare(string)
+v.Local.sBysoftFile.Declare(string)
+v.Local.sAttributes.Declare(String)
+v.Local.iFor.Declare(long)
+v.Local.iTimer.Declare(long)
+v.Local.sFileType.Declare(String)
+v.Local.iRet.Declare(long)
+v.Local.sFullName.Declare(String)
+v.Local.sBackUp.Declare(String)
+v.Local.sMsg.Declare(string)
+
+' path to move processed files
+f.Intrinsic.String.Build("{0}\Processed\",v.Args.READPATH,v.Local.sBckpPath)
+f.Intrinsic.File.DirExists(v.Local.sBckpPath,v.Local.bState)
+f.Intrinsic.Control.If(v.Local.bState,=,false)
+	f.Intrinsic.File.CreateDir(v.Local.sBckpPath)
+f.Intrinsic.Control.EndIf
+
+' check for files in read path
+F.Intrinsic.File.GetFileList(V.Args.READPATH,0,V.Local.sFileList)
+F.Intrinsic.String.Split(V.Local.sFileList,":",V.Local.sBysoftFile)
+
+' if no files are found, alert user and exit
+F.Intrinsic.Control.If(V.Local.sBysoftFile,=,"")
+	F.Intrinsic.UI.Msgbox("No Files To Load")
+	f.Intrinsic.Control.CallSub(ss_form1_unload)
+
+' could have multiple feedback files.  move file before reading.
+f.Intrinsic.Control.Else
+	v.Local.bState.Set(True)
+	f.Intrinsic.Control.For(v.Local.iFor,v.Local.sBysoftFile.LBound,v.Local.sBysoftFile.UBound,1)
+		' look for the xml file and make sure it is not locked
+		f.Intrinsic.String.Split(v.Local.sBysoftFile(v.Local.iFor),".",v.Local.sFileType)
+
+		f.Intrinsic.Control.If(v.Local.sFileType(v.Local.sFileType.UBound).UCase,=,"XML")
+			f.Intrinsic.Control.DoUntil(v.Local.bState,=,False)
+				f.Intrinsic.File.IsFileLocked(v.Local.sBysoftFile(v.Local.iFor),v.Local.bState)
+				f.Intrinsic.UI.Sleep(1)
+				f.Intrinsic.Math.Add(v.Local.iTimer,1,v.Local.iTimer)
+				' give the file 10 seconds to be released, then alert user and move to next file.
+				f.Intrinsic.Control.If(v.Local.iTimer,=,11)
+					f.Intrinsic.String.Build("File {0} is in use.{1}Unable to read file.",v.Local.sBysoftFile(v.Local.iFor),v.Ambient.NewLine,v.Local.sMsg)
+					f.Intrinsic.UI.Msgbox(v.Local.sMsg)
+'					f.Intrinsic.Control.CallSub(ss_form1_unload)
+				f.Intrinsic.Control.EndIf
+			f.Intrinsic.Control.Loop
+
+			' didn't unload, move file
+			f.Intrinsic.String.Build("{0}{1}",v.Args.READPATH,v.Local.sBysoftFile(v.Local.iFor),v.Local.sFullName)
+
+			' append file with processed date and time
+			f.Intrinsic.String.Build("{0}_{1}.bkp",v.Local.sFileType(0),v.Ambient.Now,v.Local.sBackUp)
+			f.Intrinsic.File.MakeFilenameFriendly(v.Local.sBackUp,v.Local.sBackUp)
+			f.Intrinsic.String.Build("{0}{1}",v.Local.sBckpPath,v.Local.sBackUp,v.Local.sBackUp)
+			f.Intrinsic.File.MoveFile(v.Local.sFullName,v.Local.sBackUp,v.Local.iRet)
+
+			' make sure move was successful
+			f.Intrinsic.Control.If(v.Local.iRet,=,0)
+				v.Local.bState.Set(false)
+				' if unable to move the file, alert user and unload
+				f.Intrinsic.UI.Msgbox("Unable to read or move file")
+				f.Intrinsic.Debug.SetLA(v.Local.sBysoftFile(v.Local.iFor))
+				f.Intrinsic.Debug.SetLA(v.Local.sBckpPath)
+				f.Intrinsic.Control.GoTo("NEXT")
+'				f.Intrinsic.Control.ExitFor(v.Local.iFor)
+			f.Intrinsic.Control.Else
+				' make sure a file was found, if not alert user and unload
+				f.Intrinsic.Control.If(v.Local.sBackUp.Trim,=,"")
+					f.Intrinsic.UI.Msgbox("File not found")
+					f.Intrinsic.Control.GoTo("NEXT")
+					'f.Intrinsic.Control.CallSub(ss_form1_unload)
+				f.Intrinsic.Control.EndIf
+
+				' read file
+				f.Intrinsic.Control.CallSub(readfile,"ERPFILE",v.Local.sBackUp)
+				' update material usage
+				f.Intrinsic.Control.CallSub(materialupdate,"READPATH",v.Args.READPATH)
+				' consolidate labor times, for each job-suffix-seq
+				f.Intrinsic.Control.CallSub(consolidatejobinfo)
+				' update labor to wo
+				f.Intrinsic.Control.CallSub(jobop_update,"READPATH",v.Args.READPATH,"WRITEPATH",v.Args.WRITEPATH)
+
+'				v.Local.bState.Set(True)
+''				f.Intrinsic.Control.ExitFor(v.Local.iFor)
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.EndIf		
+
+		f.Intrinsic.Control.Label("NEXT")
+	f.Intrinsic.Control.Next(v.Local.iFor)
+F.Intrinsic.Control.EndIf
+
+'' if unable to move the file, alert user and unload
+'f.Intrinsic.Control.If(v.Local.bState,=,False)
+'	f.Intrinsic.UI.Msgbox("Unable to read or move file")
+'	f.Intrinsic.Debug.SetLA(v.Local.sBysoftFile(v.Local.iFor))
+'	f.Intrinsic.Debug.SetLA(v.Local.sBckpPath)
+'	f.Intrinsic.Control.CallSub(ss_form1_unload)
+'f.Intrinsic.Control.EndIf
+
+'' make sure a file was found, if not alert user and unload
+'f.Intrinsic.Control.If(v.Local.sBackUp.Trim,=,"")
+'	f.Intrinsic.UI.Msgbox("File not found")
+'	f.Intrinsic.Control.CallSub(ss_form1_unload)
+'f.Intrinsic.Control.EndIf
+
+' did move file, will read backup.  send backup name.
+'f.Intrinsic.Variable.AddRV("ERPFILE",v.Local.sBackUp)
+
+Program.Sub.fileList.End
+
+Program.Sub.materialUpdate.Start
+
+v.Local.iFor.Declare(Long)
+v.Local.sIssue.Declare(String)
+v.Local.sUsage.Declare(String)
+V.Local.sFile.Declare(string)
+v.Local.sNow.Declare(String)
+v.Local.sDirectory.Declare(String)
+V.Local.sBackup.Declare(string)
+
+F.Intrinsic.String.StripCharacters(V.Ambient.Now,V.Local.sNow)
+
+f.Intrinsic.Control.For(v.Local.iFor,v.uGlobal.uLM!Mat_Seq.LBound,v.uGlobal.uLM!Mat_Seq.UBound,1)
+	f.Intrinsic.String.Format(v.uGlobal.uLM(v.Local.iFor)!Mat_Usage,"0.00",v.Local.sUsage)
+	f.Intrinsic.String.Build("{0}{1},,,{2},,,,,{3},{4},{5}{6}",v.Local.sIssue,v.uGlobal.uLM(v.Local.iFor)!Material,v.Local.sUsage,v.uGlobal.uLM(v.Local.iFor)!Job,v.uGlobal.uLM(v.Local.iFor)!Suffix,v.uGlobal.uLM(v.Local.iFor)!Mat_Seq,v.Ambient.NewLine,v.Local.sIssue)
+f.Intrinsic.Control.Next(v.Local.iFor)
+
+F.Intrinsic.Control.If(V.Local.sIssue.Trim,<>,"")
+	F.Intrinsic.String.Concat(V.Caller.FilesDir,"\L",V.Caller.CompanyCode,V.Caller.Terminal,"MOPEN.txt",V.Local.sFile)
+	F.Intrinsic.File.String2File(V.Local.sFile,V.Local.sIssue.Trim)
+	F.Intrinsic.String.Concat(v.Args.READPATH,"Backup\MATERIAL-",V.Caller.CompanyCode,V.Caller.Terminal,V.Local.sNow,".Bkp",V.Local.sBackup)
+	F.Intrinsic.File.String2File(V.Local.sBackup,V.Local.sIssue.Trim)
+	F.Intrinsic.String.Concat("L",V.Caller.CompanyCode,V.Caller.Terminal,"MOPEN.txt",V.Local.sFile)
+	F.Global.General.CallWrapperSync(450100,V.Local.sFile)
+'	F.Intrinsic.Task.LaunchGSSSync("WIR100","-C",V.Local.sFile)
+F.Intrinsic.Control.EndIf
+
+Program.Sub.materialUpdate.End
+
+Program.Sub.consolidateJobInfo.Start
+
+
+V.Local.iFor.Declare(Long)
+V.Local.iForB.Declare(Long)
+V.Local.sRet.Declare(String)
+V.Local.fHours.Declare(Float)
+V.Local.fPcs.Declare(Float)
+V.Local.fIssue.Declare(Float)
+
+' copy the LM udt
+F.Intrinsic.Variable.UDTCopy(V.uGlobal.uLM,V.uGlobal.uCOPY,False)
+
+' gettng a total of labor by job
+' because the other subs already work with the LM, make it the one with the consolidated information
+F.Intrinsic.Variable.UDTMultiQuickSort(V.uGlobal.uLM!Job,False,V.uGlobal.uLM!Suffix,False,V.uGlobal.uLM!Seq,False)
+F.Intrinsic.Variable.UDTMultiFlagDuplicates(V.uGlobal.uLM!Job,V.uGlobal.uLM!Suffix,V.uGlobal.uLM!Seq)
+F.Intrinsic.Variable.UDTDeleteFlagged(V.uGlobal.uLM)
+
+F.Intrinsic.Control.For(V.Local.iFor,V.uGlobal.uLM!Job.LBound,V.uGlobal.uLM!Job.UBound,1)
+	' reset values
+	V.Local.fPcs.Set(0)
+	V.Local.fHours.Set(0)
+	V.Local.fIssue.Set(0)
+
+	F.Intrinsic.Variable.UDTMultiSeek(V.uGlobal.uCOPY!Job,V.uGlobal.uLM(v.Local.iFor)!Job,V.uGlobal.uCOPY!Suffix,V.uGlobal.uLM(v.Local.iFor)!Suffix,V.uGlobal.uCOPY!Seq,V.uGlobal.uLM(v.Local.iFor)!Seq,V.Local.sRet)
+	F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+	' add PCS and HOURS to get totals, for the job
+	V.uGlobal.uLM(V.Local.iFor)!Mat_Seq.Set(V.uGlobal.uCOPY(v.Local.sRet(0))!Mat_Seq)
+	F.Intrinsic.Control.For(V.Local.iForB,V.Local.sRet.LBound,V.Local.sRet.UBound,1)
+		F.Intrinsic.Math.Add(V.Local.fHours,V.uGlobal.uCOPY(v.Local.sRet(v.Local.iForB))!Hours,V.Local.fHours)
+		F.Intrinsic.Math.Add(V.Local.fPcs,V.uGlobal.uCOPY(v.Local.sRet(v.Local.iForB))!Pcs,V.Local.fPcs)
+	F.Intrinsic.Control.Next(V.Local.iForB)
+
+	' set total values to LM udt
+	V.uGlobal.uLM(v.Local.iFor)!Hours.Set(V.Local.fHours)
+	V.uGlobal.uLM(v.Local.iFor)!Pcs.Set(V.Local.fPcs)
+F.Intrinsic.Control.Next(V.Local.iFor)
+
+
+Program.Sub.consolidateJobInfo.End
+
+Program.Sub.jobOp_Update.Start
+
+V.Local.sSel.Declare(String)
+V.Local.sSQL.Declare(String)
+V.Local.sSQLB.Declare(String)
+V.Local.fUnitsComplete.Declare(Float)
+V.Local.fUnitsOpen.Declare(Float)
+V.Local.sEmployee.Declare(String)
+V.Local.sDate.Declare(String)
+V.Local.sLine.Declare(String)
+V.Local.sClose.Declare(String)
+V.Local.sTimeIn.Declare(String)
+V.Local.sTimeOut.Declare(String)
+V.Local.dTimeOut.Declare(Date)
+V.Local.dTimeVal.Declare(Date)
+V.Local.sQty.Declare(String)
+V.Local.sFile.Declare(String)
+V.Local.fTimeUsed.Declare(Float)
+V.Local.iFor.Declare(Long)
+V.Local.fQty.Declare(Float)
+V.Local.sDel.Declare(String)
+V.Local.sRet.Declare(String)
+V.Local.sUpdateDate.Declare(String)
+V.Local.fHold.Declare(Float)
+V.Local.sBackup.Declare(String)
+V.Local.sCoreLog.Declare(String)
+V.Local.sNow.Declare(String)
+
+F.Intrinsic.String.StripCharacters(V.Ambient.Now,V.Local.sNow)
+
+F.Intrinsic.String.Format(V.Ambient.Date,"YYMMDD",V.Local.sUpdateDate)
+' for jobs with required qty > 10, update job each time
+' for jobs with required qty <=10, update when pieces are complete
+
+F.Intrinsic.Control.For(V.Local.iFor,V.uGlobal.uLM!Job.LBound,V.uGlobal.uLM!Job.UBound,1)
+	' reset all re-used variables
+	V.Local.fTimeUsed.Set(0)
+	V.Local.fUnitsComplete.Set(0)
+	V.Local.fUnitsOpen.Set(0)
+	V.Local.sClose.Set("")
+	V.Local.fQty.Set(0)
+	V.Local.sQty.Set("")
+	
+	F.Intrinsic.String.Concat("select * from Temp_Ncell_Load where Job ='",V.uGlobal.uLM(v.Local.iFor)!JOB,"' and Suffix = '",V.uGlobal.uLM(v.Local.iFor)!SUFFIX,"' and Seq = '",V.uGlobal.uLM(v.Local.iFor)!SEQ,"' ",V.Local.sSel)
+	F.ODBC.Connection!conx.OpenRecordsetRO("rstSel",V.Local.sSel)
+		' if amounts are on the table, retrieve them
+		F.Intrinsic.Control.If(V.ODBC.conx!rstSel.EOF,=,False)
+			V.Local.fTimeUsed.Set(V.ODBC.conx!rstSel.FieldVal!Hours_Actual)
+			V.Local.fQty.Set(V.ODBC.conx!rstSel.FieldVal!Qty)
+		' otherwise get amount from the file
+		F.Intrinsic.Control.Else
+			V.Local.fTimeUsed.Set(V.uGlobal.uLM(v.Local.iFor)!Hours)
+			V.Local.fQty.Set(V.uGlobal.uLM(v.Local.iFor)!Pcs)
+		F.Intrinsic.Control.EndIf
+	F.ODBC.conx!rstSel.Close
+
+	' get current piece counts.  if no current count, then count is from file
+	F.Intrinsic.String.Concat("select * from JOB_OPERATIONS where JOB='",V.uGlobal.uLM(v.Local.iFor)!JOB,"' and SUFFIX='",V.uGlobal.uLM(v.Local.iFor)!SUFFIX,"' and SEQ='",V.uGlobal.uLM(v.Local.iFor)!SEQ,"'",V.Local.sSQL)
+	F.ODBC.Connection!conx.OpenRecordsetRW("rstJobOps",V.Local.sSQL)
+		F.Intrinsic.Control.If(V.ODBC.conx!rstJobOps.EOF,=,False)
+			V.Local.fUnitsOpen.Set(V.ODBC.conx!rstJobOps.FieldVal!UNITS_OPEN)
+			F.Intrinsic.Math.Add(V.ODBC.Conx!rstJobOps.FieldVal!UNITS_COMPLETE,V.Local.fQty,V.Local.fUnitsComplete)
+			'We need to check Jobs_In_Process for anything we've already pushed out, but hasn't been grabbed by Online Update yet.
+			F.Intrinsic.String.Build("SELECT ISNULL(SUM(PIECES_GOOD),0) AS PIECES_GOOD FROM V_JOBS_IN_PROCESS WHERE JOB = '{0}' AND SUFFIX = '{1}' AND SEQUENCE = '{2}'",V.uGlobal.uLM(V.Local.iFor)!JOB,V.uGlobal.uLM(V.Local.iFor)!SUFFIX,V.uGlobal.uLM(V.Local.iFor)!SEQ,V.Local.sSQL)
+			F.ODBC.Connection!Conx.OpenLocalRecordsetRO("rstProcess",V.Local.sSQL)
+			
+			F.Intrinsic.Control.If(V.ODBC.Conx!rstProcess.EOF,<>,True)
+				F.Intrinsic.Math.Add(V.ODBC.Conx!rstProcess.FieldValFloat!PIECES_GOOD,V.Local.fUnitsComplete,V.Local.fUnitsComplete)
+			F.Intrinsic.Control.EndIf
+			
+			F.ODBC.conx!rstProcess.Close
+		F.Intrinsic.Control.Else
+			V.Local.fUnitsComplete.Set(V.uGlobal.uLM(v.Local.iFor)!Pcs)
+		F.Intrinsic.Control.EndIf
+	F.ODBC.conx!rstJobOps.Close
+
+	' close Labor seq
+	' this script will not close the L seq explicitly.  The Closed flag will be set on the file that is processed by JB0455.
+	' if the completed qty is>= the open qty, set the close flag
+	F.Intrinsic.Control.If(V.Local.fUnitsComplete,>=,V.Local.fUnitsOpen)
+		V.Local.sClose.Set("Y")
+		' be sure the flag is set, to create the labor record
+		V.uGlobal.uLM(v.Local.iFor)!Loaded.Set("Y")
+
+		' labor is determined to be complete, see if material was issued. if it was, close the M seq
+		F.Intrinsic.Math.Mult(V.uGlobal.uLM(v.Local.iFor)!Mat_Usage,-1,V.Local.fHold)
+		F.Intrinsic.Control.CallSub(issueVarification,"PART",V.uGlobal.uLM(v.Local.iFor)!Material,"JOB",V.uGlobal.uLM(v.Local.iFor)!JOB,"SUFFIX",V.uGlobal.uLM(v.Local.iFor)!SUFFIX,"SEQ",V.uGlobal.uLM(v.Local.iFor)!Mat_Seq,"QTY",V.Local.fHold,"DATE",V.Local.sUpdateDate)
+		' if the issue was found, close the seq and delete outstanding commitments
+		F.Intrinsic.Control.If(V.Args.RET,<>,"")
+			F.Intrinsic.String.Concat("Select Date_Completed, Flag_Closed  From JOB_OPERATIONS WHERE LMO='M' AND JOB='",V.uGlobal.uLM(v.Local.iFor)!JOB,"' and SUFFIX='",V.uGlobal.uLM(v.Local.iFor)!SUFFIX,"' and SEQ = '",V.uGlobal.uLM(v.Local.iFor)!Mat_Seq,"' order by SEQ desc",V.Local.sSQLB)
+			F.ODBC.Connection!conx.OpenRecordsetRW("rstSqlB",V.Local.sSQLB)
+			F.Intrinsic.Control.If(V.ODBC.conx!rstSqlB.EOF,=,False)
+				F.ODBC.conx!rstSqlB.Set!Date_Completed(V.Local.sUpdateDate)
+				F.ODBC.conx!rstSqlB.Set!FLAG_CLOSED("Y")
+				F.ODBC.conx!rstSqlB.Update
+			F.Intrinsic.Control.EndIf
+			F.ODBC.conx!rstSqlB.Close
+
+			F.Intrinsic.String.Build("delete from Job_Commitments where Job = '{0}' and Suffix = '{1}' and Sequence = '{2}' ",V.uGlobal.uLM(v.Local.iFor)!Job,V.uGlobal.uLM(v.Local.iFor)!Suffix,V.uGlobal.uLM(v.Local.iFor)!Mat_Seq,V.Local.sSel)
+			F.ODBC.Connection!conx.Execute(V.Local.sSel)
+		F.Intrinsic.Control.EndIf
+
+		' if closing seq, need to create Delete for Bysoft
+		f.Intrinsic.Control.CallSub(senddelete,"JOB",V.uGlobal.uLM(v.Local.iFor)!JOB,"SUFFIX",V.uGlobal.uLM(v.Local.iFor)!SUFFIX,"WRITEPATH",v.Args.WRITEPATH)
+
+	F.Intrinsic.Control.EndIf
+
+	' if flagged as loaded, write labor detail line
+	F.Intrinsic.Control.If(V.uGlobal.uLM(v.Local.iFor)!Loaded,=,"Y")
+		V.Local.semployee.Set("99999")
+		F.Intrinsic.String.Format(V.Ambient.Date,"MMDDYY",V.Local.sDate)
+		V.Local.sTimeIn.Set("0100")
+		F.Intrinsic.Date.ConvertTString("0100","HH:NN",V.Local.dTimeVal)
+
+		' 01/06/15 --JCT -- per Adam set to minimum 1 minute
+		' time will be in seconds.  need the time to be added for the time out
+		F.Intrinsic.Math.Mult(V.Local.fQty,V.Local.fTimeUsed,V.Local.fTimeUsed)
+		F.Intrinsic.Math.Div(V.Local.fTimeUsed,60,V.Local.fTimeUsed)
+		F.Intrinsic.Control.If(V.Local.fTimeUsed,<,1)
+			V.Local.fTimeUsed.Set(1)
+		F.Intrinsic.Control.EndIf
+		
+		F.Intrinsic.Date.DateAdd("N",V.Local.fTimeUsed,V.Local.dTimeVal,V.Local.dTimeOut)
+		F.Intrinsic.String.Format(V.Local.dTimeOut,"HHNN",V.Local.sTimeOut)
+		' Multiply by count
+		F.Intrinsic.Math.Mult(V.Local.fQty,10000,V.Local.fQty)
+		V.Local.sQty.Set(V.Local.fQty)
+		F.Intrinsic.string.Concat(V.local.sLine,V.Local.sDate,V.Ambient.Tab,V.Local.semployee,V.Ambient.Tab,V.uGlobal.uLM(v.Local.iFor)!JOB,V.Ambient.Tab,V.uGlobal.uLM(v.Local.iFor)!SUFFIX,V.Ambient.Tab,V.uGlobal.uLM(v.Local.iFor)!SEQ,V.Ambient.tab,V.uGlobal.uLM(v.Local.iFor)!WC,V.Ambient.tab,V.Local.sLine)
+		F.Intrinsic.String.Concat(V.Local.sLine,"0",V.Ambient.Tab,V.Local.sClose,V.Ambient.tab,"D",V.Ambient.tab,V.Local.sTimeIn,V.Ambient.Tab,V.Local.sTimeOut,V.Ambient.tab,"L",V.Ambient.Tab,V.Local.sQty,V.Ambient.Tab,"0",V.Ambient.Tab,"0",V.Ambient.tab,V.Ambient.NewLine,V.Local.sLine)
+
+		' remove record from Temp table
+		F.Intrinsic.String.Concat("Delete from Temp_Ncell_Load where Job ='",V.uGlobal.uLM(v.Local.iFor)!JOB,"' and Suffix = '",V.uGlobal.uLM(v.Local.iFor)!SUFFIX,"' and Seq = '",V.uGlobal.uLM(v.Local.iFor)!SEQ,"' ",V.Local.sDel)
+'		Function.Intrinsic.Debug.DumpVariableList
+		F.ODBC.Connection!conx.Execute(V.Local.sDel)
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Next(V.Local.iFor)
+
+
+' load the labor detail
+F.Intrinsic.Control.If(V.Local.sLine.Trim,<>,"")
+	F.Intrinsic.String.Concat(V.Caller.FilesDir,"\",V.Caller.CompanyCode,V.Caller.Terminal,"MOPEN.txt",V.Local.sFile)
+	F.Intrinsic.File.String2File(V.Local.sFile,V.Local.sLine)
+	F.Intrinsic.String.Concat(v.Args.READPATH,"Backup\LABOR-",V.Caller.CompanyCode,V.Caller.Terminal,V.Local.sNow,".Bkp",V.Local.sBackup)
+	F.Intrinsic.File.String2File(V.Local.sBackup,V.Local.sLine.Trim)
+	F.Intrinsic.String.Concat(V.Ambient.DblQuote,V.Caller.CompanyCode,V.Caller.Terminal,"MOPEN.txt",V.Ambient.DblQuote,V.Local.sFile)
+	F.Intrinsic.Task.LaunchGSSSync("JB0455","-C",V.Local.sFile)
+F.Intrinsic.Control.EndIf
+
+Program.Sub.jobOp_Update.End
+
+Program.Sub.issueVarification.Start
+
+
+V.Local.sSel.Declare(String)
+V.Local.sRet.Declare(String)
+
+F.Intrinsic.String.Build("select * from Inventory_Hist where Part = '{0}' and Job = '{1}' and Suffix = '{2}' and Seq = '{3}' and Date_History = '{4}' and Quantity = '{5}' ",V.Args.PART,V.Args.JOB,V.Args.SUFFIX,V.Args.SEQ,V.Args.DATE,V.Args.QTY,V.Local.sSel)
+F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSel,V.Local.sRet)
+
+F.Intrinsic.Variable.AddRV("RET",V.Local.sRet)
+
+
+Program.Sub.issueVarification.End
+
+Program.Sub.sendDelete.Start
+
+v.Local.sSel.Declare(String)
+v.Local.sRet.Declare(string)
+v.Local.sJobRet.Declare(String)
+v.Local.sCustRet.Declare(String)
+v.Local.iFor.Declare(long)
+v.Local.sFieldRef.Declare(String)
+v.Local.sFilePath.Declare(String)
+v.Local.sFileName.Declare(String)
+v.Local.sHold.Declare(String)
+v.Local.sTmp.Declare(string)
+v.Local.sLaborSeqRet.Declare(String)
+v.Local.sMaterialSeqRet.Declare(String)
+v.Local.sJob.Declare(string)
+v.Local.sSuffix.Declare(String)
+
+v.Local.sJob.Set(v.Args.JOB)
+v.Local.sSuffix.Set(v.Args.SUFFIX)
+
+' Job Header Part, Date_Opened, Date_Due, and Customer are needed for the XML
+f.Intrinsic.String.Build("select Job, Suffix, Part, Date_Opened, Date_Due, Customer, Sales_Order, Sales_Order_Line from v_Job_Header where Job = '{0}' and Suffix = '{1}'",v.Local.sJob,v.Local.sSuffix,v.Local.sSel)
+f.ODBC.Connection!Conx.ExecuteAndReturn(v.Local.sSel,v.Local.sJobRet)
+f.Intrinsic.String.Split(v.Local.sJobRet,"*!*",v.Local.sJobRet)
+v.Local.sJobRet.RedimPreserve(0,7)
+
+' Customer Name is also needed
+f.Intrinsic.String.Build("select Name_Customer from v_Customer_Master where Customer = '{0}'",v.Local.sJobRet(5).Trim,v.Local.sSel)
+f.ODBC.Connection!Conx.ExecuteAndReturn(v.Local.sSel,v.Local.sCustRet)
+
+' set new line text
+F.Intrinsic.String.Concat(V.Ambient.NewLine,V.Ambient.Tab,V.Local.shold)
+
+' only create the xml doc reference once.  check to see if it has already been created
+f.Intrinsic.Control.If(v.Global.sendDelete,=,False)
+	' create the document
+	F.global.xml.createDocument("xmlDoc",False,True,False,False)
+	'F.global.xml.SetRoot("xmlDoc","Orders")
+	F.global.xml.SetRoot("xmlDoc","ErpExchange")
+
+	F.global.xml.appendTextNode("xmlDoc","ErpExchange",V.Local.shold)
+
+	f.Global.XML.CreateElementNode("xmlDoc","Version","1.2")
+	f.Global.XML.AppendNodeToRoot("xmlDoc","Version")
+	F.global.xml.appendNode("xmlDoc","Version",V.Local.shold)
+	f.Global.XML.DestroyNode("xmlDoc","Version")
+
+	' create Orders node
+	f.Global.XML.CreateElementNode("xmlDoc","Orders","")
+	f.Global.XML.AppendNodeToRoot("xmlDoc","Orders")
+	F.global.xml.appendNode("xmlDoc","Orders",V.Local.shold)
+
+	v.Global.sendDelete.Set(True)
+f.Intrinsic.Control.EndIf
+
+
+' ======================== ERP ORDER
+' create ErpOrder node
+f.Global.XML.CreateElementNode("xmlDoc","ErpOrder","")
+f.Global.XML.AppendNode("xmlDoc","Orders","ErpOrder")
+F.global.xml.appendNode("xmlDoc","ErpOrder",V.Local.shold)
+
+' Order Number
+v.Local.sTmp.Set(v.Local.sJobRet(0).Trim)
+f.Intrinsic.Control.If(v.Local.sJobRet(1).Trim,<>,"")
+	f.Intrinsic.String.Build("{0}-{1}",v.Local.sTmp,v.Local.sJobRet(1).Trim,v.Local.sTmp)
+f.Intrinsic.Control.EndIf
+f.Global.XML.CreateElementNode("xmlDoc","OrderNumber",v.Local.sTmp.Trim)
+f.Global.XML.AppendNode("xmlDoc","ErpOrder","OrderNumber")
+F.global.xml.appendNode("xmlDoc","OrderNumber",V.Local.shold)
+f.Global.XML.DestroyNode("xmlDoc","OrderNumber")
+
+' Import Type
+f.Global.XML.CreateElementNode("xmlDoc","ImportType","DeleteOrder")
+f.Global.XML.AppendNode("xmlDoc","ErpOrder","ImportType")
+F.global.xml.appendNode("xmlDoc","ImportType",V.Local.shold)
+f.Global.XML.DestroyNode("xmlDoc","ImportType")
+
+'======================================
+f.Global.XML.DestroyNode("xmlDoc","ErpOrder")
+f.Global.XML.AppendNodeToRoot("xmlDoc","Orders")
+'f.Global.XML.DestroyNode("xmlDoc","Orders")
+'f.Global.XML.DestroyNode("xmlDoc","ErpExchange")
+
+'f.Intrinsic.Control.If(v.Global.sendDelete,=,True)
+'	'Save document
+'	f.Intrinsic.String.Build("ERP{0}-{1}.erpmod",v.Local.sJob,v.Local.sSuffix,v.Local.sFileName)
+'	F.global.xml.saveDocument("xmlDoc",v.Args.WRITEPATH,V.Local.sFileName)
+'	'close document
+'	F.global.xml.CloseDocument("xmlDoc")
+'f.Intrinsic.Control.EndIf
+
+'f.Intrinsic.String.Build("{0}{1}",v.Args.WRITEPATH,v.Local.sFileName,v.Local.sFileName)
+'f.Intrinsic.Variable.AddRV("XMLFILE",v.Local.sFilename)
+'f.Intrinsic.Control.CallSub(xml_header,"XMLFILE",v.Local.sFileName)
+
+Program.Sub.sendDelete.End
+
+Program.Sub.xml_header.Start
+
+'v.Local.bExists.Declare(Boolean)
+'v.Local.sText.Declare(String)
+'v.Local.sHeader.Declare(String)
+'v.Local.sHold.Declare(string)
+'
+'
+'f.Intrinsic.File.Exists(v.Args.XMLFILE,v.Local.bExists)
+'f.Intrinsic.Control.If(v.Local.bExists,=,false)
+'	f.Intrinsic.Control.ExitSub
+'f.Intrinsic.Control.EndIf
+'
+'' to meet their file-checker xsd
+'v.Local.sHeader.Redim(0,3)
+'v.Local.sHeader(0).Set("<?xml version="1.0" encoding="windows-1252"?> ")
+'v.Local.sHeader(1).Set("<ErpExchange xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ")
+'v.Local.sHeader(2).Set("xmlns:xsd="http://www.w3.org/2001/XMLSchema"> ")
+'v.Local.sHeader(3).Set("<Version>1.2</Version> ")
+'f.Intrinsic.String.Join(v.Local.sHeader,v.Ambient.NewLine,v.Local.sHeader)
+'f.Intrinsic.File.File2String(v.Args.XMLFILE,v.Local.sText)
+'f.Intrinsic.String.Build("<?xml version={0}1.0{0}?>",v.Ambient.DblQuote,v.Local.sHold)
+'f.Intrinsic.String.Replace(v.Local.sText,v.Local.sHold,v.Local.sHeader,v.Local.sText)
+'f.Intrinsic.String.Build("{0}{1}</ErpExchange>",v.Local.sText,v.Ambient.NewLine,v.Local.sText)
+'f.Intrinsic.File.String2File(v.Args.XMLFILE,v.Local.sText)
+
+Program.Sub.xml_header.End
+
+Program.Sub.Comments.Start
+${$0$}$GCG_Bysoft_To_GSS$}$JCT$}$06/28/15 9:32:39 AM
+${$3$}$0$}$$}$0$}$-1$}$$}$12:00:00 AM$}$Originally written for Hyflex, per quote 6707
+script will read xl file for labor and material usage from Bysoft
+will run from custom menu item
+Program.Sub.Comments.End
+
+Program.Sub.ScreenSS.Start
+SS_Form1{{CAPTION::Import Bysoft Files
+SS_Form1.CTRL{{NAME::cmdRun\\TYPE::5\\CAPTION::Run Now\\TABSTOP::1\\GROUP::-1\\BROWSER::0\\SIZE::1
+
+Program.Sub.ScreenSS.End
